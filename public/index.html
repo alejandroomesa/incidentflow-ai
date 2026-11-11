@@ -1,22 +1,47 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>IncidentFlow AI</title>
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="styles.css" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Plataforma inteligente para clasificar y gestionar incidencias de protección de datos con supervisión humana." />
+  <meta name="theme-color" content="#0f172a" />
+  <title>IncidentFlow AI · Gestión inteligente de incidencias</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
 </head>
-<body class="bg-slate-100 text-slate-900 min-h-screen">
-  <header class="bg-slate-900 text-white px-6 py-4 flex items-center justify-between">
-    <a href="#/incidents" class="text-lg font-semibold tracking-tight">IncidentFlow AI</a>
-    <span class="text-xs text-slate-400">Clasificación de incidencias de protección de datos</span>
+<body class="min-h-screen bg-slate-50 text-slate-900 antialiased">
+  <header class="border-b border-slate-800 bg-slate-950 text-white">
+    <div class="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3.5 sm:px-6 lg:px-8">
+      <a href="#/incidents" class="group flex items-center gap-3" aria-label="Ir al panel de incidencias">
+        <span class="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-indigo-500 to-blue-600 shadow-lg shadow-indigo-950/30">
+          <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path d="M12 3 4.5 6v5.3c0 4.6 3.1 8.8 7.5 9.7 4.4-.9 7.5-5.1 7.5-9.7V6L12 3Z" />
+            <path d="m9 12 2 2 4-4" />
+          </svg>
+        </span>
+        <span>
+          <span class="flex items-center gap-2">
+            <span class="text-base font-semibold tracking-tight sm:text-lg">IncidentFlow AI</span>
+            <span class="rounded-full border border-indigo-400/30 bg-indigo-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-indigo-300">Demo</span>
+          </span>
+          <span class="hidden text-xs text-slate-400 sm:block">Privacidad, trazabilidad y supervisión humana</span>
+        </span>
+      </a>
+      <div class="flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1.5 text-xs font-medium text-emerald-300">
+        <span class="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,.7)]"></span>
+        <span class="hidden sm:inline">Sistema operativo</span><span class="sm:hidden">Online</span>
+      </div>
+    </div>
   </header>
-
-  <main id="app" class="max-w-5xl mx-auto p-6"></main>
-
+  <main id="app" class="mx-auto min-h-[calc(100vh-126px)] max-w-7xl px-4 py-7 sm:px-6 lg:px-8 lg:py-10" aria-live="polite"></main>
+  <footer class="border-t border-slate-200 bg-white">
+    <div class="mx-auto flex max-w-7xl flex-col gap-2 px-4 py-5 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
+      <p>IncidentFlow AI · Clasificación asistida de incidencias</p>
+      <p>Las decisiones sensibles requieren aprobación humana.</p>
+    </div>
+  </footer>
   <script src="app.js"></script>
 </body>
 </html>

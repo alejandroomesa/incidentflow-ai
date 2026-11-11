@@ -2,29 +2,30 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+@layer base {
+  body {
+    font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+    background-image:
+      radial-gradient(circle at 10% 0%, rgba(99, 102, 241, 0.06), transparent 24rem),
+      radial-gradient(circle at 90% 10%, rgba(14, 165, 233, 0.05), transparent 22rem);
+  }
+  button, a, input, select, textarea {
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2;
+  }
 }
 
-::-webkit-scrollbar {
-  height: 8px;
-  width: 8px;
-}
-::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 999px;
+@layer components {
+  .surface-card { @apply rounded-2xl border border-slate-200/80 bg-white shadow-sm shadow-slate-900/5; }
+  .primary-button { @apply inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60; }
+  .secondary-button { @apply inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-400 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60; }
+  .form-control { @apply mt-1.5 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 hover:border-slate-400; }
+  .skeleton { @apply animate-pulse rounded-lg bg-slate-200; }
 }
 
-.fade-in {
-  animation: fadeIn 0.25s ease-out;
-}
+::-webkit-scrollbar { height: 8px; width: 8px; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 999px; }
+.fade-in { animation: fadeIn 0.25s ease-out; }
 @keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
 }
