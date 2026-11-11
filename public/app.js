@@ -429,10 +429,67 @@ function applyLanguage() {
   document.getElementById('system-status').textContent = b('Sistema operativo', 'System operational');
   document.getElementById('footer-product').textContent = b('IncidentFlow AI · Clasificación asistida de incidencias', 'IncidentFlow AI · Assisted incident classification');
   document.getElementById('footer-human').textContent = b('Las decisiones sensibles requieren aprobación humana.', 'Sensitive decisions require human approval.');
+  document.getElementById('admin-button-label').textContent = b('Administrar', 'Admin');
   document.querySelectorAll('[data-language]').forEach((button) => {
     const active = button.dataset.language === language;
     button.className = `language-button rounded-md px-2.5 py-1 text-xs font-semibold transition ${active ? 'bg-white text-slate-950' : 'text-slate-400 hover:text-white'}`;
     button.setAttribute('aria-pressed', String(active));
+  });
+}
+
+function openAdminDialog() {
+  const confirmationWord = b('BORRAR', 'DELETE');
+  const overlay = document.createElement('div');
+  overlay.className = 'fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm';
+  overlay.innerHTML = `<div class="w-full max-w-md rounded-2xl bg-white shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="admin-title">
+    <div class="flex items-start justify-between border-b border-slate-200 px-6 py-5"><div><p class="text-xs font-semibold uppercase tracking-wider text-amber-600">${b('Acceso privado', 'Private access')}</p><h2 id="admin-title" class="mt-1 text-xl font-bold text-slate-950">${b('Limpiar historial', 'Clear history')}</h2></div><button type="button" data-admin-close class="rounded-lg p-2 text-slate-400 hover:bg-slate-100" aria-label="${b('Cerrar', 'Close')}">✕</button></div>
+    <form id="admin-cleanup-form" class="space-y-4 p-6">
+      <p class="text-sm leading-6 text-slate-600">${b('Esta acción elimina permanentemente todas las incidencias, análisis de IA, actuaciones y registros de auditoría. Los visitantes normales nunca ven este control.', 'This permanently deletes every incident, AI analysis, proposed action and audit record. Regular visitors never see this control.')}</p>
+      <label class="block text-sm font-medium text-slate-700">${b('Clave administrativa', 'Admin key')}<input id="admin-token" type="password" required minlength="24" autocomplete="current-password" class="form-control" value="${escapeHtml(sessionStorage.getItem('incidentflow-admin-token') || '')}" /></label>
+      <label class="block text-sm font-medium text-slate-700">${b(`Escribe ${confirmationWord} para confirmar`, `Type ${confirmationWord} to confirm`)}<input id="admin-confirmation" required autocomplete="off" class="form-control" /></label>
+      <p id="admin-error" class="hidden rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700"></p>
+      <div class="flex justify-end gap-3"><button type="button" data-admin-close class="secondary-button">${b('Cancelar', 'Cancel')}</button><button id="admin-delete-button" type="submit" class="inline-flex items-center justify-center rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-red-700">${b('Eliminar todo el historial', 'Delete all history')}</button></div>
+    </form></div>`;
+  document.body.appendChild(overlay);
+  document.body.classList.add('overflow-hidden');
+
+  const close = () => { overlay.remove(); document.body.classList.remove('overflow-hidden'); };
+  overlay.querySelectorAll('[data-admin-close]').forEach((button) => button.addEventListener('click', close));
+  overlay.addEventListener('click', (event) => { if (event.target === overlay) close(); });
+  overlay.querySelector('#admin-token').focus();
+
+  overlay.querySelector('#admin-cleanup-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const token = overlay.querySelector('#admin-token').value;
+    const confirmation = overlay.querySelector('#admin-confirmation').value.trim().toUpperCase();
+    const errorElement = overlay.querySelector('#admin-error');
+    const deleteButton = overlay.querySelector('#admin-delete-button');
+    if (!['BORRAR', 'DELETE'].includes(confirmation)) {
+      errorElement.textContent = b(`Escribe ${confirmationWord} exactamente para continuar.`, `Type ${confirmationWord} exactly to continue.`);
+      errorElement.classList.remove('hidden');
+      return;
+    }
+
+    deleteButton.disabled = true;
+    deleteButton.textContent = b('Eliminando…', 'Deleting…');
+    errorElement.classList.add('hidden');
+    try {
+      const response = await fetch('/api/admin/incidents', { method: 'DELETE', headers: { Authorization: `Bearer ${token}`, 'Accept-Language': language } });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(language === 'es'
+        ? (data.error === 'admin_disabled' ? 'Configura ADMIN_TOKEN en Railway antes de usar este control.' : 'La clave administrativa no es válida.')
+        : (data.error === 'admin_disabled' ? 'Configure ADMIN_TOKEN in Railway before using this control.' : 'The admin key is invalid.'));
+      sessionStorage.setItem('incidentflow-admin-token', token);
+      close();
+      alert(b(`Historial eliminado: ${data.deletedIncidents} incidencias.`, `History cleared: ${data.deletedIncidents} incidents.`));
+      await router();
+    } catch (error) {
+      sessionStorage.removeItem('incidentflow-admin-token');
+      errorElement.textContent = error.message;
+      errorElement.classList.remove('hidden');
+      deleteButton.disabled = false;
+      deleteButton.textContent = b('Eliminar todo el historial', 'Delete all history');
+    }
   });
 }
 
@@ -448,6 +505,11 @@ async function router() {
 }
 
 window.addEventListener('hashchange', router);
+const adminButton = document.getElementById('admin-button');
+if (new URLSearchParams(location.search).get('admin') === '1') {
+  adminButton.classList.remove('hidden');
+}
+adminButton.addEventListener('click', openAdminDialog);
 document.querySelectorAll('[data-language]').forEach((button) => {
   button.addEventListener('click', () => {
     language = button.dataset.language;
@@ -457,7 +519,10 @@ document.querySelectorAll('[data-language]').forEach((button) => {
   });
 });
 document.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape') document.getElementById('cancel-incident-dialog')?.click();
+  if (event.key !== 'Escape') return;
+  const adminCloseButton = document.querySelector('[data-admin-close]');
+  if (adminCloseButton) adminCloseButton.click();
+  else document.getElementById('cancel-incident-dialog')?.click();
 });
 window.addEventListener('DOMContentLoaded', () => {
   applyLanguage();

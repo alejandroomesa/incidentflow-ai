@@ -25,6 +25,7 @@ La aplicación anonimiza la descripción antes de enviarla al proveedor de IA, d
 - Historial de auditoría de creación, análisis, decisiones y ejecución.
 - Estados de carga, errores recuperables y progreso visible durante el análisis.
 - Health check de aplicación y base de datos para despliegues en Railway.
+- Limpieza administrativa privada del historial, protegida por token y oculta a visitantes.
 
 ## Cómo actúa la IA
 
@@ -140,11 +141,22 @@ docker compose up -d
 | `AI_MAX_TOKENS` | No | Límite de tokens de salida |
 | `WEBHOOK_SECRET` | Sí | Secreto usado para verificar firmas HMAC |
 | `WEBHOOK_MAX_AGE_SECONDS` | No | Antigüedad máxima aceptada para un webhook |
+| `ADMIN_TOKEN` | No | Activa la limpieza privada; debe tener al menos 24 caracteres |
 | `ALLOWED_SERVICES_TO_RESTART` | No | Lista permitida para la herramienta de reinicio |
 | `ACTION_TIMEOUT_MS` | No | Timeout individual de una acción automática |
 | `AUTO_RESOLVE_TIMEOUT_MS` | No | Timeout total de un protocolo automático |
 
 Nunca publiques el archivo `.env` ni copies claves reales en capturas, commits o documentación.
+
+### Limpieza privada para demostraciones
+
+Los visitantes acceden normalmente a la aplicación y nunca necesitan contraseña. Para mostrar el control privado, el propietario abre:
+
+```text
+https://incidentflow-ai-production.up.railway.app/?admin=1
+```
+
+El botón **Administrar** solicita `ADMIN_TOKEN` antes de eliminar nada. La clave se valida en el servidor con comparación de tiempo constante, se conserva únicamente durante la sesión del navegador y nunca se incluye en el frontend. La eliminación borra incidencias, análisis, actuaciones, auditorías y entregas de webhook asociadas.
 
 ## API
 
@@ -161,6 +173,7 @@ Nunca publiques el archivo `.env` ni copies claves reales en capturas, commits o
 | `POST` | `/api/incidents/:id/reject` | Rechazar una actuación |
 | `GET` | `/api/incidents/:id/audit` | Consultar la auditoría |
 | `POST` | `/api/webhooks/incidents` | Recibir un webhook firmado |
+| `DELETE` | `/api/admin/incidents` | Borrar el historial completo; requiere `Bearer ADMIN_TOKEN` |
 
 ## Tests y calidad
 

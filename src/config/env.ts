@@ -19,6 +19,7 @@ const EnvSchema = z.object({
 
   WEBHOOK_SECRET: z.string().min(1),
   WEBHOOK_MAX_AGE_SECONDS: z.coerce.number().int().positive().default(300),
+  ADMIN_TOKEN: z.string().min(24).optional(),
 
   ALLOWED_SERVICES_TO_RESTART: z
     .string()

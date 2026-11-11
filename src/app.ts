@@ -7,6 +7,7 @@ import { checkConnection } from './config/database.js';
 import { errorHandler, notFoundHandler } from './shared/middleware/error-handler.middleware.js';
 import { incidentRouter } from './modules/incidents/incident.routes.js';
 import { webhookRouter } from './webhooks/webhook.routes.js';
+import { adminRouter } from './admin/admin.routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -33,6 +34,7 @@ export function createApp() {
   });
 
   app.use('/api/incidents', incidentRouter);
+  app.use('/api/admin', adminRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);
