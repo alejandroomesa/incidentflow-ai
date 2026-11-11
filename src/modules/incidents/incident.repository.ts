@@ -18,6 +18,8 @@ export interface IncidentRow extends RowDataPacket {
   company_name: string;
   source: string;
   description: string;
+  description_es: string | null;
+  description_en: string | null;
   reported_by: string | null;
   category: string | null;
   severity: 'low' | 'medium' | 'high' | 'critical' | null;
@@ -39,12 +41,35 @@ export const incidentRepository = {
   },
 
   async findAll(): Promise<IncidentRow[]> {
-    const [rows] = await pool.query<IncidentRow[]>('SELECT * FROM incidents ORDER BY created_at DESC');
+    const [rows] = await pool.query<IncidentRow[]>(
+      `SELECT i.*,
+        JSON_UNQUOTE(JSON_EXTRACT(ar.structured_output, '$.descriptionEs')) AS description_es,
+        JSON_UNQUOTE(JSON_EXTRACT(ar.structured_output, '$.descriptionEn')) AS description_en
+       FROM incidents i
+       LEFT JOIN agent_runs ar ON ar.id = (
+         SELECT ar2.id FROM agent_runs ar2
+         WHERE ar2.incident_id = i.id AND ar2.status = 'completed'
+         ORDER BY ar2.created_at DESC, ar2.id DESC LIMIT 1
+       )
+       ORDER BY i.created_at DESC`,
+    );
     return rows;
   },
 
   async findById(id: number): Promise<IncidentRow | null> {
-    const [rows] = await pool.execute<IncidentRow[]>('SELECT * FROM incidents WHERE id = ?', [id]);
+    const [rows] = await pool.execute<IncidentRow[]>(
+      `SELECT i.*,
+        JSON_UNQUOTE(JSON_EXTRACT(ar.structured_output, '$.descriptionEs')) AS description_es,
+        JSON_UNQUOTE(JSON_EXTRACT(ar.structured_output, '$.descriptionEn')) AS description_en
+       FROM incidents i
+       LEFT JOIN agent_runs ar ON ar.id = (
+         SELECT ar2.id FROM agent_runs ar2
+         WHERE ar2.incident_id = i.id AND ar2.status = 'completed'
+         ORDER BY ar2.created_at DESC, ar2.id DESC LIMIT 1
+       )
+       WHERE i.id = ?`,
+      [id],
+    );
     return rows[0] ?? null;
   },
 

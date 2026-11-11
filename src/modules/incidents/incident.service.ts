@@ -58,6 +58,10 @@ export const incidentService = {
       durationMs: run.duration_ms,
       createdAt: run.created_at,
       reasoning: output.reasoning,
+      reasoningEs: output.reasoningEs ?? output.reasoning,
+      reasoningEn: output.reasoningEn ?? output.reasoning,
+      descriptionEs: output.descriptionEs ?? incident.description,
+      descriptionEn: output.descriptionEn ?? incident.description,
       requiresHumanReview: output.requiresHumanReview,
     };
   },

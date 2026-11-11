@@ -11,10 +11,12 @@ La aplicación anonimiza la descripción antes de enviarla al proveedor de IA, d
 ## Funcionalidades
 
 - Panel responsive con métricas, búsqueda y filtros por estado.
+- Selector persistente español/inglés para toda la interfaz.
 - Alta manual de incidencias y ejemplos precargados para demostraciones.
 - Recepción automatizada mediante webhook firmado con HMAC-SHA256.
 - Anonimización de correos y teléfonos antes de consultar a la IA.
 - Clasificación por categoría, gravedad y nivel de confianza.
+- Traducción ES/EN de la descripción, explicación y propuestas en la misma llamada a la IA.
 - Propuesta de actuaciones estructuradas y priorizadas.
 - Puerta de aprobación humana antes de ejecutar acciones sensibles.
 - Evaluación de riesgo y resolución automática únicamente para casos de bajo riesgo compatibles con un protocolo interno.
@@ -47,7 +49,7 @@ Evaluación de riesgo
    └── riesgo medio/alto ──► aprobación humana obligatoria
 ```
 
-El backend fuerza una única respuesta estructurada mediante una llamada de herramienta (`return_classification`). La respuesta se valida antes de guardarse; un texto libre o una categoría no permitida se rechazan. El prompt obliga a marcar el resultado como provisional y a redactar la explicación y las actuaciones en español.
+El backend fuerza una única respuesta estructurada mediante una llamada de herramienta (`return_classification`). La respuesta se valida antes de guardarse; un texto libre o una categoría no permitida se rechazan. El prompt obliga a marcar el resultado como provisional y a devolver descripción, explicación y actuaciones tanto en español como en inglés.
 
 La IA no importa ni puede invocar las herramientas que crean tareas o notifican a consultores. Esas herramientas solo están disponibles en la capa de servicio y se ejecutan después de validar una aprobación humana. Esta separación está comprobada por tests.
 
@@ -61,7 +63,7 @@ El flujo actual está optimizado para realizar **una sola petición al modelo**.
 | --- | ---: | --- |
 | `CLAUDE_MODEL` | `nvidia/nemotron-nano-9b-v2:free` | Modelo o router de OpenRouter |
 | `AI_REQUEST_TIMEOUT_MS` | `60000` | Tiempo máximo de espera del backend |
-| `AI_MAX_TOKENS` | `1600` | Presupuesto máximo de la respuesta |
+| `AI_MAX_TOKENS` | `2200` | Presupuesto máximo de la respuesta bilingüe |
 
 La interfaz espera hasta 70 segundos y muestra la fase y el tiempo transcurrido. Si se usa `openrouter/free`, una demora ocasional sigue siendo esperable porque el enrutador gratuito prioriza disponibilidad y coste, no latencia. Para una demo más predecible puede elegirse otro modelo `:free` disponible, sin cambiar el código.
 

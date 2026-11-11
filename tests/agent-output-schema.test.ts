@@ -1,14 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { AgentOutputSchema } from '../src/ai/agent-output.schema.js';
+import { AgentOutputSchema, BilingualAgentOutputSchema } from '../src/ai/agent-output.schema.js';
 
 const validPayload = {
   category: 'data_breach_external_disclosure',
   severity: 'high',
   confidence: 0.82,
   reasoning: 'Based on the description, this appears to be an accidental external disclosure.',
+  reasoningEs: 'Según la descripción, parece una divulgación externa accidental.',
+  reasoningEn: 'Based on the description, this appears to be an accidental external disclosure.',
+  descriptionEs: 'Un empleado envió datos por error.',
+  descriptionEn: 'An employee sent data by mistake.',
   requiresHumanReview: true,
   proposedActions: [
-    { type: 'notify_consultant', title: 'Notify privacy team', priority: 'high', parameters: {} },
+    { type: 'notify_consultant', title: 'Avisar al equipo de privacidad', titleEs: 'Avisar al equipo de privacidad', titleEn: 'Notify the privacy team', priority: 'high', parameters: {} },
   ],
 };
 
@@ -60,5 +64,11 @@ describe('AgentOutputSchema', () => {
     const result = AgentOutputSchema.safeParse(rest);
     expect(result.success).toBe(true);
     if (result.success) expect(result.data.requiresHumanReview).toBe(true);
+  });
+
+  it('requires both languages for new AI responses', () => {
+    expect(BilingualAgentOutputSchema.safeParse(validPayload).success).toBe(true);
+    const { reasoningEn, ...incomplete } = validPayload;
+    expect(BilingualAgentOutputSchema.safeParse(incomplete).success).toBe(false);
   });
 });

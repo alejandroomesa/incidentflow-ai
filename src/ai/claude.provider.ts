@@ -6,7 +6,7 @@ import type {
 } from 'openai/resources/index.js';
 import { env } from '../config/env.js';
 import { AIProviderError } from '../shared/errors/app-error.js';
-import { AgentOutputSchema } from './agent-output.schema.js';
+import { BilingualAgentOutputSchema } from './agent-output.schema.js';
 import type { AIProvider, ClassificationRequest, ClassificationResult } from './ai-provider.interface.js';
 
 // Routed via OpenRouter (OpenAI-compatible chat completions API) to a Claude model.
@@ -32,8 +32,9 @@ HARD CONSTRAINTS (violating these makes your output unusable):
 
 Use these internal guidelines when proposing actions: contain the exposure, identify
 affected data and recipients, preserve evidence, rotate credentials when relevant,
-and escalate regulatory questions to the privacy consultant. Write the reasoning and
-action titles in Spanish.
+and escalate regulatory questions to the privacy consultant. Return faithful Spanish
+and English versions of the incident description, reasoning and every action title.
+Keep "reasoning" and "title" in Spanish as backwards-compatible fallbacks.
 
 Call return_classification exactly once. Respond only with that tool call and do not
 add commentary outside it.`;
@@ -65,6 +66,10 @@ const tools: ChatCompletionTool[] = [
           severity: { type: 'string', enum: ['low', 'medium', 'high', 'critical'] },
           confidence: { type: 'number', minimum: 0, maximum: 1 },
           reasoning: { type: 'string' },
+          reasoningEs: { type: 'string', description: 'Classification explanation in Spanish' },
+          reasoningEn: { type: 'string', description: 'Classification explanation in English' },
+          descriptionEs: { type: 'string', description: 'Faithful Spanish translation of the incident description' },
+          descriptionEn: { type: 'string', description: 'Faithful English translation of the incident description' },
           requiresHumanReview: { type: 'boolean' },
           proposedActions: {
             type: 'array',
@@ -74,14 +79,16 @@ const tools: ChatCompletionTool[] = [
               properties: {
                 type: { type: 'string', enum: ['create_internal_task', 'notify_consultant'] },
                 title: { type: 'string' },
+                titleEs: { type: 'string', description: 'Action title in Spanish' },
+                titleEn: { type: 'string', description: 'Action title in English' },
                 priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'] },
                 parameters: { type: 'object' },
               },
-              required: ['type', 'title', 'priority'],
+              required: ['type', 'title', 'titleEs', 'titleEn', 'priority'],
             },
           },
         },
-        required: ['category', 'severity', 'confidence', 'reasoning', 'requiresHumanReview', 'proposedActions'],
+        required: ['category', 'severity', 'confidence', 'reasoning', 'reasoningEs', 'reasoningEn', 'descriptionEs', 'descriptionEn', 'requiresHumanReview', 'proposedActions'],
       },
     },
   },
@@ -171,7 +178,7 @@ export class ClaudeProvider implements AIProvider {
       throw new AIProviderError('El modelo no devolvió una clasificación estructurada válida. Inténtalo de nuevo.', 502);
     }
 
-    const parsed = AgentOutputSchema.parse(JSON.parse(finalCall.function.arguments));
+    const parsed = BilingualAgentOutputSchema.parse(JSON.parse(finalCall.function.arguments));
     return {
       output: parsed,
       inputHash: sha256(req.anonymizedDescription),

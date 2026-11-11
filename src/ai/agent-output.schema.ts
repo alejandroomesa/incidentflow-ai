@@ -18,6 +18,8 @@ export const ProposedActionTypeSchema = z.enum(['create_internal_task', 'notify_
 export const ProposedActionSchema = z.object({
   type: ProposedActionTypeSchema,
   title: z.string().min(3).max(200),
+  titleEs: z.string().min(3).max(200).optional(),
+  titleEn: z.string().min(3).max(200).optional(),
   priority: z.enum(['low', 'medium', 'high', 'urgent']),
   parameters: z.record(z.string(), z.unknown()).default({}),
 });
@@ -29,9 +31,21 @@ export const AgentOutputSchema = z.object({
   severity: IncidentSeveritySchema,
   confidence: z.number().min(0).max(1),
   reasoning: z.string().min(20).max(2000),
+  reasoningEs: z.string().min(20).max(2000).optional(),
+  reasoningEn: z.string().min(20).max(2000).optional(),
+  descriptionEs: z.string().min(3).max(5000).optional(),
+  descriptionEn: z.string().min(3).max(5000).optional(),
   requiresHumanReview: z.boolean().default(true),
   proposedActions: z.array(ProposedActionSchema).max(5),
 });
+
+export const BilingualAgentOutputSchema = AgentOutputSchema.refine(
+  (output) => Boolean(
+    output.reasoningEs && output.reasoningEn && output.descriptionEs && output.descriptionEn &&
+    output.proposedActions.every((action) => action.titleEs && action.titleEn),
+  ),
+  { message: 'The AI response must include complete Spanish and English translations' },
+);
 
 export type AgentOutput = z.infer<typeof AgentOutputSchema>;
 export type ProposedAction = z.infer<typeof ProposedActionSchema>;

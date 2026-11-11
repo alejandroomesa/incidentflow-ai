@@ -76,7 +76,7 @@ export async function runIncidentAnalysis(incidentId: number): Promise<AgentOutp
       type: action.type,
       title: action.title,
       priority: action.priority,
-      parameters: action.parameters,
+      parameters: { ...action.parameters, titleEs: action.titleEs, titleEn: action.titleEn },
     });
   }
 
