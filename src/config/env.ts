@@ -14,6 +14,8 @@ const EnvSchema = z.object({
   OPENROUTER_API_KEY: z.string().min(1),
   OPENROUTER_BASE_URL: z.string().url().default('https://openrouter.ai/api/v1'),
   CLAUDE_MODEL: z.string().min(1).default('nvidia/nemotron-nano-9b-v2:free'),
+  AI_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(5_000).max(120_000).default(60_000),
+  AI_MAX_TOKENS: z.coerce.number().int().min(500).max(4_000).default(1_600),
 
   WEBHOOK_SECRET: z.string().min(1),
   WEBHOOK_MAX_AGE_SECONDS: z.coerce.number().int().positive().default(300),

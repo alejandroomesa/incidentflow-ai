@@ -3,12 +3,14 @@ import { auditService } from '../../audit/audit.service.js';
 import { createInternalTask } from '../../tools/create-task.tool.js';
 import { notifyConsultant } from '../../tools/notify-consultant.tool.js';
 import {
+  agentRunRepository,
   incidentRepository,
   proposedActionRepository,
   type IncidentRow,
   type ProposedActionRow,
 } from './incident.repository.js';
 import type { CreateIncidentInput } from './incident.schema.js';
+import { AgentOutputSchema } from '../../ai/agent-output.schema.js';
 
 export const incidentService = {
   async createIncident(input: CreateIncidentInput): Promise<IncidentRow> {
@@ -36,6 +38,28 @@ export const incidentService = {
 
   async listProposedActions(incidentId: number): Promise<ProposedActionRow[]> {
     return proposedActionRepository.findAllByIncident(incidentId);
+  },
+
+  async getLatestAnalysis(incidentId: number) {
+    const incident = await incidentRepository.findById(incidentId);
+    if (!incident) throw new NotFoundError(`Incident ${incidentId} not found`);
+
+    const run = await agentRunRepository.findLatestCompletedByIncident(incidentId);
+    if (!run) return null;
+
+    const rawOutput = typeof run.structured_output === 'string'
+      ? JSON.parse(run.structured_output)
+      : run.structured_output;
+    const output = AgentOutputSchema.parse(rawOutput);
+
+    return {
+      provider: run.provider,
+      model: run.model,
+      durationMs: run.duration_ms,
+      createdAt: run.created_at,
+      reasoning: output.reasoning,
+      requiresHumanReview: output.requiresHumanReview,
+    };
   },
 
   async approveAction(incidentId: number, actionId: number, approvedBy: string): Promise<void> {

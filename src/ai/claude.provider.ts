@@ -1,21 +1,16 @@
 import { createHash } from 'node:crypto';
-import OpenAI, { APIError } from 'openai';
+import OpenAI, { APIConnectionTimeoutError, APIError } from 'openai';
 import type {
-  ChatCompletionMessageParam,
   ChatCompletionTool,
   ChatCompletionCreateParamsNonStreaming,
 } from 'openai/resources/index.js';
 import { env } from '../config/env.js';
-import { getInternalProtocol } from '../tools/get-protocol.tool.js';
-import { saveAuditEvent } from '../tools/save-audit-event.tool.js';
 import { AIProviderError } from '../shared/errors/app-error.js';
 import { AgentOutputSchema } from './agent-output.schema.js';
 import type { AIProvider, ClassificationRequest, ClassificationResult } from './ai-provider.interface.js';
 
 // Routed via OpenRouter (OpenAI-compatible chat completions API) to a Claude model.
 // See env.CLAUDE_MODEL for the active model slug (e.g. "anthropic/claude-opus-4.8").
-
-const MAX_ITERATIONS = 4;
 
 const SYSTEM_PROMPT = `You are an internal classification and triage support tool used by data-protection
 consultants at a consulting firm. You assist consultants in categorizing reported
@@ -35,46 +30,15 @@ HARD CONSTRAINTS (violating these makes your output unusable):
 5. You cannot execute create_internal_task or notify_consultant yourself — they are
    not available to you. Only propose them in proposedActions; a human approves them.
 
-TOOLS AVAILABLE TO YOU:
-- get_internal_protocol(category): look up this firm's internal handling protocol
-  for a category, to inform which actions you propose.
-- save_audit_event(action, performedBy): log an internal audit trail note about your
-  own analysis process (performedBy should always be "ai_agent").
-- return_classification(...): call this exactly once, as your LAST action, with your
-  final structured classification. Do not produce any other free-text final answer.
+Use these internal guidelines when proposing actions: contain the exposure, identify
+affected data and recipients, preserve evidence, rotate credentials when relevant,
+and escalate regulatory questions to the privacy consultant. Write the reasoning and
+action titles in Spanish.
 
-Respond only via tool calls. Do not add commentary outside tool calls.`;
+Call return_classification exactly once. Respond only with that tool call and do not
+add commentary outside it.`;
 
 const tools: ChatCompletionTool[] = [
-  {
-    type: 'function',
-    function: {
-      name: 'get_internal_protocol',
-      description: "Look up this firm's internal handling protocol for an incident category.",
-      parameters: {
-        type: 'object',
-        properties: {
-          category: { type: 'string', description: 'The incident category to look up' },
-        },
-        required: ['category'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'save_audit_event',
-      description: 'Log an internal audit trail note about the analysis process.',
-      parameters: {
-        type: 'object',
-        properties: {
-          action: { type: 'string' },
-          performedBy: { type: 'string' },
-        },
-        required: ['action', 'performedBy'],
-      },
-    },
-  },
   {
     type: 'function',
     function: {
@@ -147,6 +111,8 @@ export class ClaudeProvider implements AIProvider {
     this.client = new OpenAI({
       apiKey: env.OPENROUTER_API_KEY,
       baseURL: env.OPENROUTER_BASE_URL,
+      timeout: env.AI_REQUEST_TIMEOUT_MS,
+      maxRetries: 0,
     });
   }
 
@@ -154,6 +120,13 @@ export class ClaudeProvider implements AIProvider {
     try {
       return await this.client.chat.completions.create(params);
     } catch (err) {
+      if (err instanceof APIConnectionTimeoutError) {
+        throw new AIProviderError(
+          `El proveedor de IA no respondió en ${Math.round(env.AI_REQUEST_TIMEOUT_MS / 1000)} segundos. ` +
+            'Los modelos gratuitos pueden estar saturados; inténtalo de nuevo.',
+          504,
+        );
+      }
       if (err instanceof APIError) {
         if (err.status === 402) {
           throw new AIProviderError(
@@ -179,73 +152,32 @@ export class ClaudeProvider implements AIProvider {
 
   async classifyIncident(req: ClassificationRequest): Promise<ClassificationResult> {
     const startedAt = Date.now();
-    const messages: ChatCompletionMessageParam[] = [
-      { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: buildUserPrompt(req) },
-    ];
+    const response = await this.createCompletion({
+      model: env.CLAUDE_MODEL,
+      max_tokens: env.AI_MAX_TOKENS,
+      tools,
+      tool_choice: { type: 'function', function: { name: 'return_classification' } },
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: buildUserPrompt(req) },
+      ],
+    });
 
-    for (let i = 0; i < MAX_ITERATIONS; i++) {
-      const forcingFinal = i === MAX_ITERATIONS - 1;
-      const response = await this.createCompletion({
-        model: env.CLAUDE_MODEL,
-        // Some models (e.g. free ones) mandate reasoning and reject `reasoning: {enabled: false}`,
-        // so we don't force it off — instead we budget enough max_tokens to cover both the
-        // reasoning trace and the final tool-call JSON.
-        max_tokens: 2000,
-        tools,
-        tool_choice: forcingFinal ? { type: 'function', function: { name: 'return_classification' } } : 'auto',
-        messages,
-      });
-
-      const message = response.choices[0]?.message;
-      if (!message) throw new Error('Empty response from AI provider');
-
-      messages.push(message);
-
-      const toolCalls = message.tool_calls ?? [];
-      const finalCall = toolCalls.find((c) => c.type === 'function' && c.function.name === 'return_classification');
-
-      if (finalCall && finalCall.type === 'function') {
-        const parsed = AgentOutputSchema.parse(JSON.parse(finalCall.function.arguments));
-        return {
-          output: parsed,
-          inputHash: sha256(req.anonymizedDescription),
-          model: env.CLAUDE_MODEL,
-          provider: 'openrouter',
-          durationMs: Date.now() - startedAt,
-        };
-      }
-
-      if (toolCalls.length === 0) {
-        // Model responded with no tool calls at all — nudge it back on track.
-        messages.push({
-          role: 'user',
-          content: 'You must respond using tool calls only. Call return_classification with your final answer.',
-        });
-        continue;
-      }
-
-      for (const call of toolCalls) {
-        if (call.type !== 'function') continue;
-        let content: string;
-        try {
-          if (call.function.name === 'get_internal_protocol') {
-            const args = JSON.parse(call.function.arguments) as { category: string };
-            content = getInternalProtocol(args.category);
-          } else if (call.function.name === 'save_audit_event') {
-            const args = JSON.parse(call.function.arguments) as { action: string; performedBy: string };
-            await saveAuditEvent({ incidentId: req.incidentId, action: args.action, performedBy: args.performedBy });
-            content = 'ok';
-          } else {
-            content = `Unknown tool: ${call.function.name}`;
-          }
-        } catch (err) {
-          content = `Tool error: ${String(err)}`;
-        }
-        messages.push({ role: 'tool', tool_call_id: call.id, content });
-      }
+    const message = response.choices[0]?.message;
+    const finalCall = message?.tool_calls?.find(
+      (call) => call.type === 'function' && call.function.name === 'return_classification',
+    );
+    if (!finalCall || finalCall.type !== 'function') {
+      throw new AIProviderError('El modelo no devolvió una clasificación estructurada válida. Inténtalo de nuevo.', 502);
     }
 
-    throw new Error('Agent did not produce a classification within iteration budget');
+    const parsed = AgentOutputSchema.parse(JSON.parse(finalCall.function.arguments));
+    return {
+      output: parsed,
+      inputHash: sha256(req.anonymizedDescription),
+      model: env.CLAUDE_MODEL,
+      provider: 'openrouter',
+      durationMs: Date.now() - startedAt,
+    };
   }
 }

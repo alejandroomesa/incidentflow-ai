@@ -6,6 +6,7 @@ vi.mock('../src/modules/incidents/incident.service.js', () => ({
     createIncident: vi.fn(),
     listIncidents: vi.fn(),
     getIncident: vi.fn(),
+    getLatestAnalysis: vi.fn(),
     listProposedActions: vi.fn(),
     approveAction: vi.fn(),
     rejectAction: vi.fn(),
@@ -86,5 +87,23 @@ describe('incidents routes', () => {
     const res = await request(app).get('/api/incidents/1/audit');
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);
+  });
+
+  it('GET /api/incidents/:id/analysis returns safe AI metadata', async () => {
+    vi.mocked(incidentService.getLatestAnalysis).mockResolvedValue({
+      provider: 'openrouter',
+      model: 'openrouter/free',
+      durationMs: 4321,
+      createdAt: '2026-01-01 00:00:00',
+      reasoning: 'Según la descripción, parece una divulgación externa accidental.',
+      requiresHumanReview: true,
+    });
+
+    const res = await request(app).get('/api/incidents/1/analysis');
+
+    expect(res.status).toBe(200);
+    expect(res.body.durationMs).toBe(4321);
+    expect(res.body.reasoning).toContain('divulgación');
+    expect(res.body.inputHash).toBeUndefined();
   });
 });

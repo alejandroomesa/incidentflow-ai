@@ -92,6 +92,17 @@ export interface AgentRunRow extends RowDataPacket {
 }
 
 export const agentRunRepository = {
+  async findLatestCompletedByIncident(incidentId: number): Promise<AgentRunRow | null> {
+    const [rows] = await pool.execute<AgentRunRow[]>(
+      `SELECT * FROM agent_runs
+       WHERE incident_id = ? AND status = 'completed'
+       ORDER BY created_at DESC, id DESC
+       LIMIT 1`,
+      [incidentId],
+    );
+    return rows[0] ?? null;
+  },
+
   async insertCompleted(
     incidentId: number,
     fields: { provider: string; model: string; inputHash: string; structuredOutput: unknown; durationMs: number },

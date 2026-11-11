@@ -11,3 +11,4 @@ incidentRouter.post('/:id/approve', incidentController.approve);
 incidentRouter.post('/:id/reject', incidentController.reject);
 incidentRouter.get('/:id/audit', incidentController.audit);
 incidentRouter.get('/:id/actions', incidentController.listActions);
+incidentRouter.get('/:id/analysis', incidentController.latestAnalysis);

@@ -90,4 +90,14 @@ export const incidentController = {
       next(err);
     }
   },
+
+  async latestAnalysis(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { id } = IncidentIdParamSchema.parse(req.params);
+      const analysis = await incidentService.getLatestAnalysis(id);
+      res.json(analysis);
+    } catch (err) {
+      next(err);
+    }
+  },
 };

@@ -63,11 +63,12 @@ function severityBadge(severity) {
 }
 
 async function api(path, options = {}) {
+  const { timeoutMs = 15_000, ...fetchOptions } = options;
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 20_000);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(`/api${path}`, {
-      headers: { 'Content-Type': 'application/json' }, signal: controller.signal, ...options,
+      headers: { 'Content-Type': 'application/json' }, signal: controller.signal, ...fetchOptions,
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.message || data.error || `La solicitud ha fallado (${response.status})`);
@@ -186,6 +187,11 @@ async function viewIncidentList() {
       <p class="text-xs font-semibold uppercase tracking-wider text-indigo-600">Nuevo registro</p><h2 id="dialog-title" class="mt-1 text-xl font-bold text-slate-950">Reportar una incidencia</h2>
     </div><button id="close-incident-dialog" class="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label="Cerrar">✕</button></div>
     <form id="new-incident-form" class="space-y-4 p-6">
+      <div><p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Ejemplos para la demo</p><div class="mt-2 flex flex-wrap gap-2">
+        <button type="button" data-incident-example="disclosure" class="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700">Envío al destinatario equivocado</button>
+        <button type="button" data-incident-example="phishing" class="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700">Phishing</button>
+        <button type="button" data-incident-example="configuration" class="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700">Configuración expuesta</button>
+      </div></div>
       <label class="block text-sm font-medium text-slate-700">Empresa<input name="company" required maxlength="255" class="form-control" placeholder="Empresa Demo SL" /></label>
       <label class="block text-sm font-medium text-slate-700">Reportado por <span class="font-normal text-slate-400">(opcional)</span><input name="reportedBy" maxlength="255" class="form-control" placeholder="Departamento de Administración" /></label>
       <label class="block text-sm font-medium text-slate-700">Descripción<textarea name="description" required rows="5" class="form-control resize-none" placeholder="Describe qué ha ocurrido, qué datos pueden estar afectados y cómo se detectó..."></textarea></label>
@@ -203,6 +209,21 @@ async function viewIncidentList() {
   document.getElementById('close-incident-dialog')?.addEventListener('click', closeDialog);
   document.getElementById('cancel-incident-dialog')?.addEventListener('click', closeDialog);
   dialog.addEventListener('click', (event) => { if (event.target === dialog) closeDialog(); });
+
+  const examples = {
+    disclosure: 'Una persona del equipo envió por error una hoja de cálculo con nombres, correos y teléfonos de 35 clientes a un proveedor que no debía recibirla. El destinatario ha confirmado la recepción, pero todavía no su eliminación.',
+    phishing: 'Un empleado introdujo sus credenciales corporativas en una página de phishing. La cuenta tenía acceso a expedientes con datos personales y se detectó un inicio de sesión desde una ubicación desconocida.',
+    configuration: 'Se detectó que un contenedor de almacenamiento con documentos de clientes estuvo accesible públicamente durante aproximadamente dos horas por un error de configuración.',
+  };
+  dialog.querySelectorAll('[data-incident-example]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const form = document.getElementById('new-incident-form');
+      form.company.value = 'Empresa Demo SL';
+      form.reportedBy.value = 'Equipo de Seguridad';
+      form.description.value = examples[button.dataset.incidentExample];
+      form.description.focus();
+    });
+  });
   const applyFilters = () => {
     const query = document.getElementById('incident-search')?.value.trim().toLowerCase() || '';
     const status = document.getElementById('incident-status-filter')?.value || '';
@@ -258,21 +279,52 @@ async function viewIncidentDetail(id) {
       <div><dt class="text-xs font-semibold uppercase tracking-wide text-slate-400">Reportado por</dt><dd class="mt-1 text-sm font-medium text-slate-700">${escapeHtml(incident.reported_by || 'No indicado')}</dd></div>
       <div><dt class="text-xs font-semibold uppercase tracking-wide text-slate-400">Fecha</dt><dd class="mt-1 text-sm font-medium text-slate-700">${formatDate(incident.created_at)}</dd></div></dl>
       <div class="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4"><p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Descripción</p><p class="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">${escapeHtml(incident.description)}</p></div>
-      ${incident.status === 'pending' ? '<button id="analyze-btn" class="primary-button mt-5">Analizar con IA</button>' : ''}<p id="analyze-error" class="mt-3 text-sm text-red-600"></p>
+      ${incident.status === 'pending' ? '<button id="analyze-btn" class="primary-button mt-5">Analizar con IA</button>' : ''}<p id="analysis-progress" class="mt-3 text-sm text-indigo-600" aria-live="polite"></p><p id="analyze-error" class="mt-2 text-sm text-red-600"></p>
     </div></section>
     <section class="surface-card p-6"><div class="mb-4 flex items-center justify-between gap-3"><div><h2 class="font-semibold text-slate-900">Actuaciones propuestas</h2><p class="mt-1 text-xs text-slate-500">Requieren una decisión humana antes de ejecutarse.</p></div><span class="rounded-full bg-purple-50 px-2.5 py-1 text-xs font-semibold text-purple-700 ring-1 ring-purple-100">Human-in-the-loop</span></div><div id="actions-list" class="space-y-3"><div class="skeleton h-20 w-full"></div></div></section>
   </div><aside class="space-y-6">
     <section class="surface-card p-5"><h2 class="font-semibold text-slate-900">Clasificación de IA</h2>${incident.category ? `<p class="mt-1 text-xs leading-5 text-slate-500">Resultado orientativo pendiente de revisión profesional.</p><div class="mt-4 flex flex-wrap gap-2">${badge(humanize(incident.category), 'bg-indigo-50 text-indigo-700 ring-indigo-200')}${incident.severity ? severityBadge(incident.severity) : ''}</div>
-      <div class="mt-5"><div class="flex justify-between text-xs"><span class="font-medium text-slate-600">Confianza</span><span class="font-semibold text-slate-900">${confidence}%</span></div><div class="mt-2 h-2 overflow-hidden rounded-full bg-slate-100"><div class="h-full rounded-full bg-indigo-500" style="width:${confidence}%"></div></div></div>` : '<p class="mt-2 text-sm leading-6 text-slate-500">La incidencia todavía no ha sido analizada.</p>'}</section>
+      <div class="mt-5"><div class="flex justify-between text-xs"><span class="font-medium text-slate-600">Confianza</span><span class="font-semibold text-slate-900">${confidence}%</span></div><div class="mt-2 h-2 overflow-hidden rounded-full bg-slate-100"><div class="h-full rounded-full bg-indigo-500" style="width:${confidence}%"></div></div></div><div id="analysis-insight" class="mt-5 border-t border-slate-100 pt-5"><div class="skeleton h-16 w-full"></div></div>` : '<p class="mt-2 text-sm leading-6 text-slate-500">La incidencia todavía no ha sido analizada.</p>'}</section>
     <section class="rounded-2xl bg-slate-950 p-5 text-white shadow-lg shadow-slate-900/10"><p class="text-xs font-semibold uppercase tracking-wider text-indigo-300">Trazabilidad</p><h2 class="mt-2 font-semibold">Historial de auditoría</h2><p class="mt-2 text-sm leading-6 text-slate-400">Consulta cada cambio, decisión y ejecución registrada para esta incidencia.</p><a href="#/incidents/${id}/audit" class="mt-4 inline-flex text-sm font-semibold text-white hover:text-indigo-300">Ver historial →</a></section>
   </aside></div>`);
 
   document.getElementById('analyze-btn')?.addEventListener('click', async (event) => {
     const button = event.currentTarget; button.disabled = true; button.textContent = 'Analizando…';
-    try { await api(`/incidents/${id}/analyze`, { method: 'POST' }); await viewIncidentDetail(id); }
-    catch (error) { document.getElementById('analyze-error').textContent = error.message; button.disabled = false; button.textContent = 'Analizar con IA'; }
+    const progress = document.getElementById('analysis-progress');
+    const startedAt = Date.now();
+    const updateProgress = () => {
+      const seconds = Math.floor((Date.now() - startedAt) / 1000);
+      const phase = seconds < 5 ? 'Anonimizando y preparando el contexto' : seconds < 20 ? 'Clasificando con el modelo de IA' : 'El modelo gratuito sigue procesando la solicitud';
+      progress.textContent = `${phase} · ${seconds} s`;
+    };
+    updateProgress();
+    const progressTimer = setInterval(updateProgress, 1_000);
+    try {
+      await api(`/incidents/${id}/analyze`, { method: 'POST', timeoutMs: 70_000 });
+      await viewIncidentDetail(id);
+    } catch (error) {
+      document.getElementById('analyze-error').textContent = error.message;
+      button.disabled = false; button.textContent = 'Reintentar análisis';
+    } finally {
+      clearInterval(progressTimer);
+      if (document.body.contains(progress)) progress.textContent = '';
+    }
   });
-  await refreshActions(id);
+  await Promise.all([refreshActions(id), incident.category ? refreshAnalysis(id) : Promise.resolve()]);
+}
+
+async function refreshAnalysis(incidentId) {
+  const container = document.getElementById('analysis-insight');
+  if (!container) return;
+  try {
+    const analysis = await api(`/incidents/${incidentId}/analysis`);
+    if (!analysis) { container.remove(); return; }
+    const seconds = analysis.durationMs == null ? 'No disponible' : `${(analysis.durationMs / 1000).toFixed(1)} s`;
+    container.innerHTML = `<p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Explicación del modelo</p><p class="mt-2 text-sm leading-6 text-slate-700">${escapeHtml(analysis.reasoning)}</p>
+      <dl class="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-slate-50 p-3 text-xs"><div><dt class="text-slate-400">Duración</dt><dd class="mt-1 font-semibold text-slate-700">${seconds}</dd></div><div><dt class="text-slate-400">Modelo</dt><dd class="mt-1 break-all font-semibold text-slate-700">${escapeHtml(analysis.model)}</dd></div></dl>`;
+  } catch (error) {
+    container.innerHTML = `<p class="text-xs text-slate-500">No se pudieron cargar los detalles técnicos del análisis.</p>`;
+  }
 }
 
 async function refreshActions(incidentId) {

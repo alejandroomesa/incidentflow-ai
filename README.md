@@ -1,136 +1,216 @@
 # IncidentFlow AI
 
-Agente de clasificación y gestión de incidencias de protección de datos. Recibe
-una incidencia (formulario o webhook firmado), la anonimiza, la clasifica con IA,
-propone actuaciones y **exige aprobación humana** antes de ejecutar cualquier
-acción sensible. Todo queda registrado en un historial de auditoría.
+Plataforma para registrar, clasificar y gestionar incidencias de protección de datos con asistencia de inteligencia artificial y supervisión humana.
 
-> La IA nunca emite una resolución jurídica definitiva. Es una herramienta de
-> clasificación y apoyo para el consultor — no un sustituto del consultor.
+**Demo:** [incidentflow-ai-production.up.railway.app](https://incidentflow-ai-production.up.railway.app)
 
-## Stack
+La aplicación anonimiza la descripción antes de enviarla al proveedor de IA, devuelve una clasificación estructurada y propone actuaciones. Ninguna actuación sensible se ejecuta sin una aprobación humana explícita y todo el proceso queda reflejado en un historial de auditoría.
 
-Node.js + TypeScript + Express · MySQL (Docker Compose) · OpenRouter (modelo
-Claude vía API compatible con OpenAI) · Zod · Vitest + Supertest · Tailwind (CDN)
-+ vanilla JS para el panel.
+> IncidentFlow AI es una demostración técnica. La clasificación generada no es asesoramiento jurídico ni sustituye la valoración de un profesional de protección de datos.
 
-## Puesta en marcha
+## Funcionalidades
 
-1. Copia `.env.example` a `.env` y rellena:
-   - `OPENROUTER_API_KEY` — tu clave de [OpenRouter](https://openrouter.ai/settings/keys)
-   - `WEBHOOK_SECRET` — cualquier cadena para firmar los webhooks de la demo
-2. Levanta MySQL:
-   ```
-   docker compose up -d mysql
-   ```
-3. Aplica las migraciones de base de datos (si es necesario):
-   ```powershell
-   # Windows PowerShell
-   .\scripts\apply-migration-003.ps1
-   ```
-   ```bash
-   # Linux/Mac/WSL
-   ./scripts/apply-migration-003.sh
-   ```
-4. Instala dependencias y arranca el servidor:
-   ```
-   npm install
-   npm run dev
-   ```
-5. Abre [http://localhost:3000](http://localhost:3000) para el panel, o
-   `curl http://localhost:3000/api/health` para comprobar la conexión a BD.
+- Panel responsive con métricas, búsqueda y filtros por estado.
+- Alta manual de incidencias y ejemplos precargados para demostraciones.
+- Recepción automatizada mediante webhook firmado con HMAC-SHA256.
+- Anonimización de correos y teléfonos antes de consultar a la IA.
+- Clasificación por categoría, gravedad y nivel de confianza.
+- Propuesta de actuaciones estructuradas y priorizadas.
+- Puerta de aprobación humana antes de ejecutar acciones sensibles.
+- Evaluación de riesgo y resolución automática únicamente para casos de bajo riesgo compatibles con un protocolo interno.
+- Historial de auditoría de creación, análisis, decisiones y ejecución.
+- Estados de carga, errores recuperables y progreso visible durante el análisis.
+- Health check de aplicación y base de datos para despliegues en Railway.
 
-Alternativa: `docker compose up -d` levanta MySQL **y** la app dentro de Docker
-(usa entonces `docker compose logs -f app` para ver los logs).
+## Cómo actúa la IA
 
-**Nota**: La migración 003 añade soporte para resolución automática de incidencias.
-Consulta `db/MIGRATION_003_README.md` para más detalles.
-
-## Ejecutar tests
-
+```text
+Incidencia
+   │
+   ▼
+Anonimización de PII ──► hash del texto anonimizado para auditoría
+   │
+   ▼
+OpenRouter / modelo configurado
+   │
+   ▼
+Salida validada con Zod
+   ├── categoría
+   ├── gravedad
+   ├── confianza
+   ├── explicación orientativa
+   └── actuaciones propuestas
+   │
+   ▼
+Evaluación de riesgo
+   ├── riesgo bajo ──► protocolo automático permitido
+   └── riesgo medio/alto ──► aprobación humana obligatoria
 ```
+
+El backend fuerza una única respuesta estructurada mediante una llamada de herramienta (`return_classification`). La respuesta se valida antes de guardarse; un texto libre o una categoría no permitida se rechazan. El prompt obliga a marcar el resultado como provisional y a redactar la explicación y las actuaciones en español.
+
+La IA no importa ni puede invocar las herramientas que crean tareas o notifican a consultores. Esas herramientas solo están disponibles en la capa de servicio y se ejecutan después de validar una aprobación humana. Esta separación está comprobada por tests.
+
+## Rendimiento del análisis
+
+La latencia depende principalmente del proveedor y del modelo configurado. Los modelos gratuitos de OpenRouter pueden tener cola, limitar peticiones o cambiar según disponibilidad.
+
+El flujo actual está optimizado para realizar **una sola petición al modelo**. La configuración relevante es:
+
+| Variable | Valor predeterminado | Uso |
+| --- | ---: | --- |
+| `CLAUDE_MODEL` | `nvidia/nemotron-nano-9b-v2:free` | Modelo o router de OpenRouter |
+| `AI_REQUEST_TIMEOUT_MS` | `60000` | Tiempo máximo de espera del backend |
+| `AI_MAX_TOKENS` | `1600` | Presupuesto máximo de la respuesta |
+
+La interfaz espera hasta 70 segundos y muestra la fase y el tiempo transcurrido. Si se usa `openrouter/free`, una demora ocasional sigue siendo esperable porque el enrutador gratuito prioriza disponibilidad y coste, no latencia. Para una demo más predecible puede elegirse otro modelo `:free` disponible, sin cambiar el código.
+
+## Arquitectura
+
+```text
+public/                         Panel web en JavaScript y Tailwind CSS
+src/
+├── ai/                        Proveedor, prompt, esquema y orquestación de IA
+├── anonymization/             Enmascarado de información personal
+├── audit/                     Registro de trazabilidad
+├── auto-resolution/           Protocolos de resolución de bajo riesgo
+├── modules/incidents/         API, servicio y acceso a datos
+├── modules/protocols/         Validación y ejecución de protocolos
+├── tools/                     Acciones aisladas del agente
+└── webhooks/                  Ingesta firmada e idempotente
+db/                            Esquema y migraciones MySQL
+scripts/                       Migración y simulación de webhooks
+tests/                         Tests unitarios, de rutas y propiedades
+```
+
+## Tecnologías
+
+- Node.js 20, TypeScript y Express.
+- MySQL 8.
+- OpenRouter mediante el SDK compatible de OpenAI.
+- Zod para validar entradas, configuración y salida de la IA.
+- Vitest, Supertest y fast-check.
+- Tailwind CSS y JavaScript sin framework en el frontend.
+- Docker y Railway para despliegue.
+
+## Ejecución local
+
+Requisitos: Node.js 20+, npm, Docker y una clave de OpenRouter.
+
+```bash
+git clone https://github.com/alejandroomesa/incidentflow-ai.git
+cd incidentflow-ai
+npm install
+```
+
+1. Copia `.env.example` como `.env` y completa `OPENROUTER_API_KEY` y `WEBHOOK_SECRET`.
+2. Arranca MySQL y aplica las migraciones.
+3. Inicia el servidor de desarrollo.
+
+```bash
+docker compose up -d mysql
+npm run db:migrate
+npm run dev
+```
+
+Abre [http://localhost:3000](http://localhost:3000). La API de salud está disponible en [http://localhost:3000/api/health](http://localhost:3000/api/health).
+
+También puedes levantar la aplicación y MySQL juntos con:
+
+```bash
+docker compose up -d
+```
+
+## Variables de entorno
+
+| Variable | Obligatoria | Descripción |
+| --- | --- | --- |
+| `PORT` | No | Puerto HTTP; Railway lo proporciona automáticamente |
+| `NODE_ENV` | No | `development`, `test` o `production` |
+| `DB_HOST`, `DB_PORT` | Sí | Host y puerto de MySQL |
+| `DB_USER`, `DB_PASSWORD`, `DB_NAME` | Sí | Credenciales y base de datos |
+| `OPENROUTER_API_KEY` | Sí | Clave privada de OpenRouter |
+| `OPENROUTER_BASE_URL` | No | API compatible; por defecto OpenRouter |
+| `CLAUDE_MODEL` | No | Identificador del modelo configurado |
+| `AI_REQUEST_TIMEOUT_MS` | No | Timeout de la petición al modelo |
+| `AI_MAX_TOKENS` | No | Límite de tokens de salida |
+| `WEBHOOK_SECRET` | Sí | Secreto usado para verificar firmas HMAC |
+| `WEBHOOK_MAX_AGE_SECONDS` | No | Antigüedad máxima aceptada para un webhook |
+| `ALLOWED_SERVICES_TO_RESTART` | No | Lista permitida para la herramienta de reinicio |
+| `ACTION_TIMEOUT_MS` | No | Timeout individual de una acción automática |
+| `AUTO_RESOLVE_TIMEOUT_MS` | No | Timeout total de un protocolo automático |
+
+Nunca publiques el archivo `.env` ni copies claves reales en capturas, commits o documentación.
+
+## API
+
+| Método | Ruta | Descripción |
+| --- | --- | --- |
+| `GET` | `/api/health` | Salud del servicio y conexión a MySQL |
+| `POST` | `/api/incidents` | Crear una incidencia |
+| `GET` | `/api/incidents` | Listar incidencias |
+| `GET` | `/api/incidents/:id` | Consultar una incidencia |
+| `POST` | `/api/incidents/:id/analyze` | Analizar y clasificar con IA |
+| `GET` | `/api/incidents/:id/actions` | Listar actuaciones propuestas |
+| `GET` | `/api/incidents/:id/analysis` | Consultar explicación, modelo y duración del último análisis |
+| `POST` | `/api/incidents/:id/approve` | Aprobar y ejecutar una actuación |
+| `POST` | `/api/incidents/:id/reject` | Rechazar una actuación |
+| `GET` | `/api/incidents/:id/audit` | Consultar la auditoría |
+| `POST` | `/api/webhooks/incidents` | Recibir un webhook firmado |
+
+## Tests y calidad
+
+```bash
 npm test
+npm run build
 ```
 
-29 tests: anonimización de PII, validación Zod de la salida de la IA, verificación
-de firma de webhook (válida/inválida/repetida/caducada), y la puerta de
-aprobación humana (incluida una comprobación de que `src/ai/**` nunca importa las
-tools sensibles).
+La suite cubre anonimización, validación de la salida de IA, firmas y repetición de webhooks, rutas HTTP, puerta de aprobación, evaluación de riesgo, protocolos, timeouts y herramientas permitidas.
 
-## Endpoints
+## Guion de demostración
 
-```
-POST   /api/incidents                 Crear incidencia manualmente
-GET    /api/incidents                 Listar incidencias
-GET    /api/incidents/:id             Ver una incidencia
-POST   /api/incidents/:id/analyze     Clasificar con IA
-POST   /api/incidents/:id/approve     Aprobar una actuación propuesta {actionId, approvedBy}
-POST   /api/incidents/:id/reject      Rechazar una actuación propuesta {actionId, rejectedBy, reason?}
-GET    /api/incidents/:id/actions     Listar actuaciones propuestas
-GET    /api/incidents/:id/audit       Historial de auditoría
+1. Abre la demo y pulsa **Nueva incidencia**.
+2. Selecciona uno de los ejemplos o escribe un caso propio.
+3. Abre la incidencia y pulsa **Analizar con IA**.
+4. Observa el progreso, la clasificación, la gravedad y la confianza.
+5. Revisa las actuaciones propuestas y aprueba o rechaza una.
+6. Abre el historial de auditoría para mostrar la trazabilidad completa.
 
-POST   /api/webhooks/incidents        Ingesta firmada (HMAC)
+Para demostrar la ingesta automática, configura `WEBHOOK_SECRET` y ejecuta:
 
-GET    /api/health                    Estado del servicio y de la BD
+```bash
+node scripts/simulate-webhook.mjs valid
 ```
 
-## Guion de demo (4–5 min)
+También existen los escenarios `bad-signature`, `stale` y `replay` para enseñar los controles de seguridad.
 
-1. Abre el panel (`http://localhost:3000`) — no hay incidencias pendientes.
-2. Simula un webhook firmado:
-   ```
-   WEBHOOK_SECRET=<tu valor de .env> node scripts/simulate-webhook.mjs valid
-   ```
-3. Recarga el panel — la incidencia aparece con estado `pending`.
-4. Entra en la incidencia y pulsa **Analyze with AI**.
-5. Se muestra la clasificación estructurada (categoría, gravedad, confianza,
-   nota de razonamiento) etiquetada explícitamente como "pending consultant
-   review" — nunca como un veredicto.
-6. Aprueba una de las actuaciones propuestas (p. ej. `create_internal_task`).
-7. La tarea se "crea" (se ejecuta la tool, visible en los logs del servidor) y
-   la actuación pasa a `executed`.
-8. Abre el historial de auditoría de la incidencia — se ve cada paso: creación,
-   inicio de análisis, clasificación, aprobación, ejecución.
-9. Simula un webhook con firma incorrecta:
-   ```
-   WEBHOOK_SECRET=<tu valor de .env> node scripts/simulate-webhook.mjs bad-signature
-   ```
-10. El servidor responde `401 invalid_signature`.
+## Despliegue en Railway
 
-Bonus: `node scripts/simulate-webhook.mjs stale` (rechazado por timestamp
-caducado) y `node scripts/simulate-webhook.mjs replay <deliveryId>` repetido dos
-veces (la segunda vez responde `already_processed`, sin duplicar la incidencia).
+El repositorio incluye `railway.json` y una migración previa al despliegue. En Railway:
 
-## Decisiones de diseño relevantes
+1. Crea un servicio desde este repositorio y añade un servicio MySQL.
+2. Configura las variables de base de datos usando las referencias del servicio MySQL.
+3. Añade `OPENROUTER_API_KEY`, `WEBHOOK_SECRET`, `CLAUDE_MODEL` y las variables opcionales de IA.
+4. Genera un dominio público; la aplicación escucha el `PORT` inyectado por Railway.
 
-- **Human-in-the-loop real, no solo documentado**: `src/ai/**` nunca importa
-  `src/tools/create-task.tool.ts` ni `src/tools/notify-consultant.tool.ts` — la
-  IA no tiene ningún camino de código para ejecutarlas. Solo
-  `incident.service.ts` las invoca, y solo tras `approveAction`. Verificado por
-  test (`tests/approval-gate.test.ts`).
-- **La IA nunca resuelve legalmente**: el system prompt de `claude.provider.ts`
-  prohíbe explícitamente afirmaciones legales definitivas (p. ej. sobre
-  obligación de notificar a la AEPD) y fuerza `requiresHumanReview: true` en
-  cada respuesta.
-- **Sin prompts con PII en logs**: `agent_runs.input_hash` almacena
-  `SHA256(descripción anonimizada)`, nunca el texto original.
-- **Anonimización antes de la IA**: `src/anonymization/pii-mask.ts` enmascara
-  emails y teléfonos antes de enviar nada al proveedor de IA. Es una
-  aproximación por regex, suficiente para una demo — no un motor de detección
-  de PII de producción.
-- **Webhook firmado**: HMAC-SHA256 sobre el cuerpo crudo (no el JSON
-  re-serializado), comparación con `timingSafeEqual`, idempotencia vía
-  restricción `UNIQUE` en `webhook_deliveries.delivery_id`, y rechazo de
-  timestamps con más de `WEBHOOK_MAX_AGE_SECONDS` (300s por defecto) de
-  antigüedad.
-- **Proveedor de IA desacoplado**: `ai-provider.interface.ts` define el
-  contrato; `claude.provider.ts` lo implementa vía OpenRouter (modelo Claude);
-  `gemini.provider.ts` es solo un stub que documenta el punto de extensión.
+El health check es `/api/health`. Cada push a `main` inicia un nuevo despliegue.
 
-## Limitaciones conocidas (demo, no producción)
+## Seguridad y límites conocidos
 
-- El enmascarado de PII es por regex, no NLP.
-- `notify_consultant` y `create_internal_task` solo registran en consola/BD —
-  no hay integración real con email/Slack/ticketing.
-- No hay autenticación de usuarios en el panel — cualquiera con acceso a la red
-  puede aprobar/rechazar (fuera de alcance para esta demo).
+- El enmascarado actual usa expresiones regulares; una solución de producción necesitaría detección de PII más completa.
+- La aplicación de demostración no incorpora autenticación ni control de roles.
+- Las herramientas de creación de tareas y notificaciones simulan integraciones mediante registros y base de datos.
+- Los modelos gratuitos no ofrecen una garantía de latencia o disponibilidad.
+- Antes de un uso real serían necesarios gestión de secretos, rate limiting, observabilidad, copias de seguridad y revisión jurídica y de seguridad.
+
+## Próximos pasos
+
+- Autenticación y roles de analista, revisor y administrador.
+- Notificaciones reales por correo, Slack o un sistema de tickets.
+- Métricas de latencia, coste y calidad por modelo.
+- Procesamiento asíncrono del análisis con una cola de trabajos.
+- Exportación de informes y auditorías en PDF.
+
+---
+
+Proyecto desarrollado como demostración de arquitectura de agentes seguros: IA estructurada, privacidad por diseño, acciones con aprobación humana y trazabilidad de extremo a extremo.
