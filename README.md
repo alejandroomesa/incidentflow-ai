@@ -4,6 +4,8 @@ Plataforma para registrar, clasificar y gestionar incidencias de protección de 
 
 **Demo:** [incidentflow-ai-production.up.railway.app](https://incidentflow-ai-production.up.railway.app)
 
+![Vista previa social de IncidentFlow AI](public/incidentflow-social-preview.png)
+
 La aplicación anonimiza la descripción antes de enviarla al proveedor de IA, devuelve una clasificación estructurada y propone actuaciones. Ninguna actuación sensible se ejecuta sin una aprobación humana explícita y todo el proceso queda reflejado en un historial de auditoría.
 
 > IncidentFlow AI es una demostración técnica. La clasificación generada no es asesoramiento jurídico ni sustituye la valoración de un profesional de protección de datos.
