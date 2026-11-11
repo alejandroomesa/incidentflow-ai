@@ -7,6 +7,7 @@
     "build:css": "tailwindcss -i ./styles/input.css -o ./public/styles.css --minify",
     "dev": "npm run build:css && tsx watch src/server.ts",
     "build": "npm run build:css && tsc -p tsconfig.json",
+    "db:migrate": "node scripts/migrate.mjs",
     "start": "node dist/server.js",
     "test": "vitest run",
     "test:watch": "vitest"
